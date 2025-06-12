@@ -36,12 +36,15 @@ def scan_tcp_port(ip, port, show_errors):
                 else:
                     if show_errors:
                         print(f"TCP {port} - error ({result})")
+                    tcp_results.setdefault(ip, []).append(('TCP', port, f'error ({result})'))
         except socket.timeout:
             if show_errors:
-                print(f"TCP {port} - open or filtered")
+                print(f"TCP {port} - timed out")
+            tcp_results.setdefault(ip, []).append(('TCP', port, 'timeout'))
         except Exception as e:
             if show_errors:
                 print(f"TCP {port} - error ({e})")
+            tcp_results.setdefault(ip, []).append(('TCP', port, f'exception ({e})'))
     return False
 
 def scan_udp_port(ip, port, show_errors):
@@ -91,7 +94,7 @@ def is_valid_ip(address):
 
 def get_show_errors(protocol):
     while True:
-        user_input = input(f"see errors for {protocol} scan? (true/false): ").strip().lower()
+        user_input = input(f"include errors for {protocol} scan? (true/false): ").strip().lower()
         if user_input in ['true', 'false']:
             return user_input == 'true'
         else:
@@ -113,10 +116,8 @@ def get_worker_count():
         else:
             print("bad input - only positive integers are accepted")
 
-
-def parse_port_range():
-    default_start, default_end = 0, 65536
-    user_input = input(f"enter port range (e.g., 20-80) or press Enter for default ({default_start}-{default_end - 1}): ").strip()
+def parse_port_range(prompt_message, default_start=0, default_end=65536):
+    user_input = input(prompt_message).strip()
     if not user_input:
         return range(default_start, default_end)
     match = re.match(r'^(\d+)\s*-\s*(\d+)$', user_input)
@@ -132,18 +133,20 @@ def parse_port_range():
         return range(default_start, default_end)
 
 def main():
-    target_input = input("host to scan: ").strip()
+    while True:
+        target_input = input("host to scan: ").strip()
 
-    if is_valid_ip(target_input):
-        target_ip = target_input
-    else:
-        try:
-            print(f"resolving {target_input}...")
-            target_ip = socket.gethostbyname(target_input)
-            print(f"{target_input} resolved to {target_ip}")
-        except socket.gaierror:
-            print(f"error on resolving {target_input}")
-            return
+        if is_valid_ip(target_input):
+            target_ip = target_input
+            break
+        else:
+            try:
+                print(f"resolving {target_input}")
+                target_ip = socket.gethostbyname(target_input)
+                print(f"{target_input} resolved to {target_ip}")
+                break
+            except socket.gaierror:
+                print(f"bad input - '{target_input}' host must be domains or machine addresses (127.0.0.1/example.com)")
 
     print(f"resolving {target_ip}")
     ping_host(target_ip)
@@ -155,19 +158,23 @@ def main():
 
     batch_size = max_workers
 
-    ports = parse_port_range()
+    tcp_port_range = parse_port_range("enter TCP port range (e.g., 20-80) or press Enter for default (0-65535): ", 0, 65535)
+    udp_port_range = parse_port_range("enter UDP port range (e.g., 20-80) or press Enter for default (0-65535): ", 0, 65535)
+
+    tcp_port_list = list(tcp_port_range)
+    udp_port_list = list(udp_port_range)
 
     print("scanning TCP in batches")
-    for i in range(0, len(ports), batch_size):
-        batch_ports = list(ports)[i:i+batch_size]
+    for i in range(0, len(tcp_port_list), batch_size):
+        batch_ports = tcp_port_list[i:i+batch_size]
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(scan_tcp_port, target_ip, port, show_tcp_errors) for port in batch_ports]
             for future in as_completed(futures):
                 pass
 
     print("scanning UDP in batches")
-    for i in range(0, len(ports), batch_size):
-        batch_ports = list(ports)[i:i+batch_size]
+    for i in range(0, len(udp_port_list), batch_size):
+        batch_ports = udp_port_list[i:i+batch_size]
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(scan_udp_port, target_ip, port, show_udp_errors) for port in batch_ports]
             for future in as_completed(futures):
@@ -194,10 +201,10 @@ def format_udp_results(udp_results):
         for proto, port, status in results:
             lines.append(f"{ip:<15} {port:<6} {status}")
     return "\n".join(lines)
-
+    
 def log_results(target_ip, tcp_results, udp_results):
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    filename = f"portscan_{date_str}.log"
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    filename = f"portscan_{timestamp}.log"
     try:
         with open(filename, 'w') as f:
             f.write(f"scan results for {target_ip}\n")
@@ -208,8 +215,6 @@ def log_results(target_ip, tcp_results, udp_results):
         print(f"wrote {filename}")
     except Exception as e:
         print(f"couldn't write log file: {e}")
-
-
 
 if __name__ == "__main__":
     main()
