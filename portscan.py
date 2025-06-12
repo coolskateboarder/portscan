@@ -146,7 +146,7 @@ def main():
                 print(f"{target_input} resolved to {target_ip}")
                 break
             except socket.gaierror:
-                print(f"bad input - '{target_input}' host must be domains or machine addresses (127.0.0.1/example.com)")
+                print(f"bad input - '{target_input}' host must be domain or machine address (127.0.0.1/example.com)")
 
     print(f"resolving {target_ip}")
     ping_host(target_ip)
