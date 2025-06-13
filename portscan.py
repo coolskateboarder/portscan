@@ -57,31 +57,36 @@ def scan_udp_port(ip, port, show_errors):
             udp_results.setdefault(ip, []).append(('UDP', port, 'open/filtered'))
             return True
         except socket.timeout:
-            print(f"UDP {port} - no response (filtered or no service)")
-            udp_results.setdefault(ip, []).append(('UDP', port, 'filtered'))
+            if show_errors:
+                print(f"UDP {port} - no response (filtered or no service)")
+            udp_results.setdefault(ip, []).append(('UDP', port, 'filtered or no service'))
         except socket.error as e:
             if hasattr(e, 'errno'):
                 if e.errno == getattr(socket, 'ECONNREFUSED', None):
-                    print(f"UDP {port} - port is closed (connection refused)")
+                    if show_errors:
+                        print(f"UDP {port} - port is closed (connection refused)")
                     udp_results.setdefault(ip, []).append(('UDP', port, 'closed'))
                 elif e.errno == getattr(socket, 'EHOSTUNREACH', None):
-                    print(f"UDP {port} - host unreachable")
+                    if show_errors:
+                        print(f"UDP {port} - host unreachable")
                     udp_results.setdefault(ip, []).append(('UDP', port, 'unreachable'))
                 elif e.errno == getattr(socket, 'ENETUNREACH', None):
-                    print(f"UDP {port} - network unreachable")
+                    if show_errors:
+                        print(f"UDP {port} - network unreachable")
                     udp_results.setdefault(ip, []).append(('UDP', port, 'network unreachable'))
                 elif e.errno == getattr(socket, 'EPERM', None):
-                    print(f"UDP {port} - operation not permitted (firewall or permissions)")
+                    if show_errors:
+                        print(f"UDP {port} - operation not permitted (firewall or permissions)")
                     udp_results.setdefault(ip, []).append(('UDP', port, 'not permitted'))
                 else:
                     if show_errors:
                         print(f"UDP {port} - socket error ({e})")
             else:
                 if show_errors:
-                    print(f"UDP {port} - socket error ({e})")
+                    print(f"UDP {port} - unexpected error ({e})")
         except Exception as e:
             if show_errors:
-                print(f"UDP {port} - unexpected error ({e})")
+                print(f"UDP {port} - unexpected exception ({e})")
     return False
 
 def is_valid_ip(address):
